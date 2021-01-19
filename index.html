@@ -1,0 +1,264 @@
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="description" content="Top3, a goal setting template to focus on your tasks">
+<title>Top3 - goal setting template</title>
+
+<script>
+let sessionId = 0; // current session, 0 is not started
+let isBreak = true; // toggles between session and following break
+let timerId = 0;
+
+// create a noise generator: https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Advanced_techniques
+const AudioContext = window.AudioContext || window.webkitAudioContext; // for cross browser compatibility
+const audioContext = new AudioContext();
+let sound = audioContext.createBufferSource();
+let filter = audioContext.createBiquadFilter();
+let gainNode = audioContext.createGain();
+
+function startNoise(audioContext, filter, gainNode) {
+    const NOISE_DURATION_SECONDS = 2;
+    const bufferSize = audioContext.sampleRate * NOISE_DURATION_SECONDS;
+    const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate); // create an empty buffer
+    let data = buffer.getChannelData(0); // get data
+    
+    // fill the buffer with noise
+    for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+    }
+
+    // create a buffer source for our data
+    let sound = audioContext.createBufferSource();
+    sound.buffer = buffer;
+    sound.loop = true;
+    
+    // set bandpass filter frequency according to slider
+    let freq = document.querySelector('#frequency').value;
+    filter.frequency.value = freq;
+    filter.type = 'bandpass';
+
+    // set volume according to slider
+    let volume = document.querySelector('#volume').value;
+    gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+
+    // wire them
+    sound.connect(filter).connect(gainNode).connect(audioContext.destination);
+    sound.start();
+    return sound;
+}    
+
+function startCountdown(duration_minutes, isBreak) {
+    const INTERVAL_MS = 100;
+    const BREAK_SYMBOL = '&#x2615;'; // hot beverage: https://www.unicompat.com/2615
+    const WORK_SYMBOL = '&#x1F4BB;'; // computer: https://www.unicompat.com/1F4BB
+    let end_timestamp = Date.now() + duration_minutes * 60 * 1000;
+    let duration_seconds = duration_minutes * 60;
+    timerId = setInterval(function() {
+        let now = Date.now();
+        let seconds_left = Math.floor((end_timestamp - now) / 1000);
+        if (seconds_left >= 0) {
+            let minutes = Math.floor(seconds_left / 60);
+            minutes = minutes < 10 ? "0" + minutes : minutes;
+            let seconds = seconds_left % 60;
+            seconds = seconds < 10 ? "0" + seconds : seconds;
+            let timeString = minutes + ':' + seconds + ' ';
+            timeString += isBreak ? BREAK_SYMBOL : WORK_SYMBOL;
+            document.querySelector('#countdown').innerHTML = timeString;
+
+            let shortTimeString = Math.round(seconds_left / 60);
+            if (isBreak) {
+                let cup = 'ÙÚÛ'[seconds_left % 3]; // Ù,Ú,Û,Ü
+                shortTimeString = cup;
+            }
+            document.querySelector('title').text = shortTimeString + " Top3 - goal setting template";
+        } else {
+            clearInterval(timerId);
+            document.querySelector('title').text = "Top3 - goal setting template";
+            sound.stop();
+            nextStep();
+        }
+    }, INTERVAL_MS);
+}
+
+// set all session labels to normal style
+function unmarkSessionLabels() {
+    document.querySelectorAll('.sessions label').forEach(it => it.setAttribute('style', 'font-weight:unset'));
+}
+
+// set current session label as bold
+function markSessionLabel(sessionId) {
+    document.querySelector('#session' + sessionId).labels[0].setAttribute('style', 'font-weight:bold');
+}
+
+function nextStep() {
+    unmarkSessionLabels();
+    
+    // step to next duration of session or break with a non-empty length and start countdown
+    let minutes = 0;
+    while (minutes == 0) {
+        isBreak = !isBreak;
+        let field = '';
+        if (!isBreak) {
+            sessionId += 1;
+            field = '#length' + sessionId;
+        }
+        else {
+            field = '#break' + sessionId;
+        }
+
+        if (!document.querySelector(field)) {
+            // if all remaining entries were empty or no session is left, stop and set to initial state
+            sessionId = 0;
+            isBreak = true;
+            document.querySelector('#start').disabled = false; // re-enable start button
+            break;
+        }
+        else if (document.querySelector(field).value > 0) {
+            minutes = document.querySelector(field).value;
+            if (!isBreak) {
+                sound = startNoise(audioContext, filter, gainNode);
+            }
+            startCountdown(minutes, isBreak);
+            markSessionLabel(sessionId);
+        }
+    }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    const bandControl = document.querySelector('#frequency');
+    bandControl.addEventListener('input', function() {
+        let freq = Number(this.value);
+        filter.frequency.value = freq;
+    }, false);
+
+    const volumeControl = document.querySelector('#volume');
+    volumeControl.addEventListener('input', function() {
+        let volume = Number(this.value);
+        gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+    }, false);
+
+    // select our play button
+    document.querySelector('#start').addEventListener('click', function() {
+        // check if context is in suspended state (autoplay policy)
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+        if (sessionId == 0) {
+            // we ignore button clicks unless we're (back) at initial state
+            nextStep();
+            this.disabled = true;
+        }
+    }, false);
+    
+    document.querySelector("#clearGoals").addEventListener("click", function() {
+        document.querySelectorAll('.goals > input').forEach(it => it.value="");
+    });
+    document.querySelector("#clearSessions").addEventListener("click", function() {
+        document.querySelectorAll('.sessions > input[type=text]').forEach(it => it.value="");
+    });
+});
+</script>
+</head>
+<body>
+
+<h1>Top3 - <span id="countdown">00:00</span></h1>
+
+<fieldset>
+  <legend>Goals</legend>
+  <div class="goals">
+    <label for="goal1">1</label>
+    <input type="text" name="goal1" id="goal1" placeholder="Goal 1">
+    <input type="text" name="result1" id="result1" placeholder="Result 1">
+    <input type="checkbox" name="done1" id="done1">
+  </div>
+  <div class="goals">
+    <label for="goal2">2</label>
+    <input type="text" name="goal2" id="goal2" placeholder="Goal 2">
+    <input type="text" name="result2" id="result2" placeholder="Result 2">
+    <input type="checkbox" name="done2" id="done2">
+  </div>
+  <div class="goals">
+    <label for="goal3">3</label>
+    <input type="text" name="goal3" id="goal3" placeholder="(Goal 3)">
+    <input type="text" name="result3" id="result3" placeholder="(Result 3)">
+    <input type="checkbox" name="done3" id="done3">
+  </div>
+  <button id="clearGoals" onclick="return false;">Clear</button>
+</fieldset>  
+
+<fieldset>
+  <legend>Sessions</legend>
+  <div class="sessions">
+    <label for="session1">1</label>
+    <input type="text" name="session1" id="session1" placeholder="Session 1">
+    <input name="length1" id="length1" value="50" maxlength="3" size="3">
+    <input name="break1" id="break1" value="10" maxlength="3" size="3">
+  </div>
+  <div class="sessions">
+    <label for="session2">2</label>
+    <input type="text" name="session2" id="session2" placeholder="Session 2">
+    <input name="length2" id="length2" value="50" maxlength="3" size="3">
+    <input name="break2" id="break2" value="10" maxlength="3" size="3">
+  </div>
+  <div class="sessions">
+    <label for="session3">3</label>
+    <input type="text" name="session3" id="session3" placeholder="Session 3">
+    <input name="length3" id="length3" value="50" maxlength="3" size="3">
+    <input name="break3" id="break3" value="10" maxlength="3" size="3">
+  </div>
+  <div class="sessions">
+    <label for="session4">4</label>
+    <input type="text" name="session4" id="session4" placeholder="Session 4">
+    <input name="length4" id="length4" value="50" maxlength="3" size="3">
+    <input name="break4" id="break4" value="10" maxlength="3" size="3">
+  </div>
+  <div class="sessions">
+    <label for="session5">5</label>
+    <input type="text" name="session5" id="session5" placeholder="Session 5">
+    <input name="length5" id="length5" value="50" maxlength="3" size="3">
+  </div>
+
+  <button id="clearSessions" onclick="return false;">Clear</button>
+</fieldset>
+
+<fieldset>
+  <legend>Control</legend>
+
+  <button id="start" onclick="return false">Start</button>
+
+  <label for="frequency">Frequency:</label>
+  <input name="frequency" id="frequency" type="range" min="400" max="1200" value="1000" step="5" />
+
+  <label for="volume">Volume:</label>
+  <input name="volume" id="volume" type="range" min="0" max="1" value="0.5" step="0.01" />
+</fieldset>  
+
+<fieldset>
+  <legend>Not now list</legend>
+    <textarea name="notnow" id="notnow" rows="5" cols="60" placeholder="Dump ideas / ToDos for later to not interrupt your flow"></textarea>
+</fieldset>
+
+<div>
+Focus on your goals and tasks:
+<ul>
+  <li>Set your goals for the day, with the most important / highest impact goal on top</li>
+  <li>Restrict to 3 goals maximum!</li>
+  <li>Define the expected outcome of each (e.g. first draft, sent to customer, passes all tests, ...)</li>
+  <li>Divide your goals into individual tasks / sessions</li>
+  <li>Set the duration of the focus sessions (and the following breaks)</li>
+  <li>Leave your phone in another room, ideally in Airplane mode</li>
+  <li>Press start, and focus on the current session</li>
+  <li>Once started, there is no stopping. If you really need to start fresh, press F5 to reload the page</li>
+  <li>You can always modify the duration of a break or session that hasn't started yet</li>
+  <li>During breaks: walk around, stretch, do jumping jacks, push ups, meditate, ...</li>
+  <li>The noise filters out potential background noise and stops for the break. You can mute it with the Volume slider</li>
+  <li>Use the text area below to remember things you want to do later without interrupting your session</li>
+  <li>Get into the flow :-)</li>
+</ul>
+Privacy: Everything runs in your browser, no server needed, no cookies. You can simply download the file and open it locally.
+<br>
+Inspired by <a href="https://www.productivityday.com/">Productivity Day</a>.
+</div>
+
+</body>
+</html>

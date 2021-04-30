@@ -5,9 +5,17 @@
 <title>Top3 - goal setting template</title>
 
 <script>
+const INTERVAL_MS = 100;
+const WORK_SYMBOL = '&#x1F4BB;'; // computer: https://www.unicompat.com/1F4BB
+const BREAK_SYMBOL = '&#x2615;'; // hot beverage: https://www.unicompat.com/2615
+const PAUSE_LABEL = '||';
+const START_LABEL = '>';
 let sessionId = 0; // current session, 0 is not started
-let isBreak = true; // toggles between session and following break
 let timerId = 0;
+let state = 'off'; // off, work, break, pause
+let oldState = '';
+let end_timestamp = 0;
+let pause_timestamp = 0;
 
 // create a noise generator: https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Advanced_techniques
 const AudioContext = window.AudioContext || window.webkitAudioContext; // for cross browser compatibility
@@ -45,15 +53,15 @@ function startNoise(audioContext, filter, gainNode) {
     sound.connect(filter).connect(gainNode).connect(audioContext.destination);
     sound.start();
     return sound;
-}    
+}
 
 function startCountdown(duration_minutes, isBreak) {
-    const INTERVAL_MS = 100;
-    const BREAK_SYMBOL = '&#x2615;'; // hot beverage: https://www.unicompat.com/2615
-    const WORK_SYMBOL = '&#x1F4BB;'; // computer: https://www.unicompat.com/1F4BB
-    let end_timestamp = Date.now() + duration_minutes * 60 * 1000;
+    end_timestamp = Date.now() + duration_minutes * 60 * 1000;
     let duration_seconds = duration_minutes * 60;
     timerId = setInterval(function() {
+        if (state == 'pause') {
+          return;
+        }
         let now = Date.now();
         let seconds_left = Math.floor((end_timestamp - now) / 1000);
         if (seconds_left >= 0) {
@@ -73,6 +81,7 @@ function startCountdown(duration_minutes, isBreak) {
             document.querySelector('title').text = shortTimeString + " Top3 - goal setting template";
         } else {
             clearInterval(timerId);
+            document.querySelector('#countdown').innerHTML = "00:00";
             document.querySelector('title').text = "Top3 - goal setting template";
             sound.stop();
             nextStep();
@@ -96,29 +105,30 @@ function nextStep() {
     // step to next duration of session or break with a non-empty length and start countdown
     let minutes = 0;
     while (minutes == 0) {
-        isBreak = !isBreak;
         let field = '';
-        if (!isBreak) {
+        if (state == 'off' || state == 'break') {
             sessionId += 1;
+            state = 'work';
             field = '#length' + sessionId;
         }
         else {
+            state = 'break';
             field = '#break' + sessionId;
         }
 
         if (!document.querySelector(field)) {
             // if all remaining entries were empty or no session is left, stop and set to initial state
             sessionId = 0;
-            isBreak = true;
-            document.querySelector('#start').disabled = false; // re-enable start button
+            state = 'off';
+            document.querySelector('#start').textContent = START_LABEL;
             break;
         }
         else if (document.querySelector(field).value > 0) {
             minutes = document.querySelector(field).value;
-            if (!isBreak) {
+            if (state == 'work') {
                 sound = startNoise(audioContext, filter, gainNode);
             }
-            startCountdown(minutes, isBreak);
+            startCountdown(minutes, state == 'break');
             markSessionLabel(sessionId);
         }
     }
@@ -143,10 +153,19 @@ document.addEventListener("DOMContentLoaded", function() {
         if (audioContext.state === 'suspended') {
             audioContext.resume();
         }
-        if (sessionId == 0) {
-            // we ignore button clicks unless we're (back) at initial state
-            nextStep();
-            this.disabled = true;
+        if (state == 'off') {
+          nextStep();
+          state = 'work';
+          document.querySelector('#start').textContent = PAUSE_LABEL;
+        } else if (state == 'work' || state == 'break') {
+          pause_timestamp = Date.now();
+          oldState = state;
+          state = 'pause';
+          audioContext.suspend();
+        } else if (state == 'pause'){
+          end_timestamp += (Date.now() - pause_timestamp);
+          state = oldState;
+          oldState = '';
         }
     }, false);
     
@@ -224,7 +243,7 @@ document.addEventListener("DOMContentLoaded", function() {
 <fieldset>
   <legend>Control</legend>
 
-  <button id="start" onclick="return false">Start</button>
+  <button id="start" onclick="return false">&gt;</button>
 
   <label for="frequency">Frequency:</label>
   <input name="frequency" id="frequency" type="range" min="400" max="1200" value="1000" step="5" />
@@ -248,7 +267,7 @@ Focus on your goals and tasks:
   <li>Set the duration of the focus sessions (and the following breaks)</li>
   <li>Leave your phone in another room, ideally in Airplane mode</li>
   <li>Press start, and focus on the current session</li>
-  <li>Once started, there is no stopping. If you really need to start fresh, press F5 to reload the page</li>
+  <li>Once started, there is no stopping (only pausing). To start fresh, press F5 to reload the page</li>
   <li>You can always modify the duration of a break or session that hasn't started yet</li>
   <li>During breaks: walk around, stretch, do jumping jacks, push ups, meditate, ...</li>
   <li>The noise filters out potential background noise and stops for the break. You can mute it with the Volume slider</li>

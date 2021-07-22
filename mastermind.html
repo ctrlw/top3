@@ -209,6 +209,7 @@ document.addEventListener("DOMContentLoaded", function() {
 </tr>
 </table>
 
+<form action="">
 <fieldset>
   <legend>Control</legend>
   <table>
@@ -221,10 +222,11 @@ document.addEventListener("DOMContentLoaded", function() {
     <td><input type="text" name="break" id="break" placeholder="seconds" value="30"></td>
   </tr>
   <tr>
-    <td><button id="start" onclick="return false">&gt;</button></td>
+    <td><button id="start" onclick="return false" type="submit">&gt;</button></td>
   </tr>
   </table>
-</fieldset>  
+</fieldset>
+</form>
 
 <div>
 Split the given time among different numbers of users. Optional transition phases (breaks) may be taken into account. The timer cannot be stopped once it's started, but you can reload the page.

@@ -1,0 +1,238 @@
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="description" content="Mastermind countdown">
+<title>Mastermind</title>
+
+<style>
+  body {
+    font: 0.9em Verdana, sans-serif;
+  }
+  fieldset {
+    -moz-border-radius: 3px;
+    -webkit-border-radius: 3px;
+    border-radius: 3px;
+  }
+  button {
+    margin: 2px;
+  }
+  input {
+    margin: 2px;
+  }
+  td {
+    vertical-align: top;
+  }
+  th {
+    padding: 2em;
+  }
+  #start {
+    width: 100px;
+    color: #14396A !important;
+    padding: 10px 25px;
+    -moz-border-radius: 10px;
+    -webkit-border-radius: 10px;
+    border-radius: 10px;
+    border: 2px solid #3866A3;
+    background: #63B8EE;
+  }
+  #start:hover {
+    color: #14396A !important;
+    background: #468CCF;
+  } 
+  #start:disabled {
+    color: #AAAAAA !important;
+    background: #CCCCCC;
+    border-color: #AAAAAA;
+  } 
+</style>
+
+<script>
+const TITLE = 'Mastermind';
+const INTERVAL_MS = 100;
+
+// create array with slot names and durations for a given number of people
+function computeSlots(duration_minutes, break_seconds, people) {
+  if (duration_minutes <= 0 || break_seconds <= 0 || people <= 0) {
+    return [];
+  }
+
+  let duration_seconds = duration_minutes * 60;
+  if ((people - 1) * break_seconds >= duration_seconds) {
+    // if the breaks would fill or exceed the duration, skip them
+    break_seconds = 0;
+  }
+  let people_seconds = duration_seconds - (people - 1) * break_seconds;
+  let person_seconds = people_seconds / people;
+  person_seconds = person_seconds < 0 ? 0 : person_seconds;
+  let slots = [];
+  let end_seconds = 0;
+  for (let i = 0; i < people; i++) {
+    let name = 'Person ' + (i + 1);
+    end_seconds += person_seconds;
+    slots.push({'name': name, 'end_seconds': Math.floor(end_seconds)}); // floor to sync timers
+    if (i + 1 < people && break_seconds > 0) {
+      // add break except after the last participant
+      end_seconds += break_seconds;
+      slots.push({"name": 'Transition', 'end_seconds': Math.floor(end_seconds)}); // floor to sync timers
+    }
+  }
+  return slots; // [{"name": "Person 1", "end_seconds": 180}, ..]
+}
+
+// convert the number of seconds into a string with format m:ss
+function formatSeconds(duration_seconds) {
+  let minutes = Math.floor(duration_seconds / 60);
+  let seconds = Math.floor(duration_seconds % 60);
+  seconds = seconds < 10 ? '0' + seconds : seconds;
+  return minutes + ':' + seconds;
+}
+
+// print all slot names and durations into a given html element
+function printTimes(slots, id) {
+  s = '';
+  for (let i = 0; i < slots.length; i++) {
+    let name = slots[i]['name'];
+    let previous_duration = i == 0 ? 0 : slots[i - 1]['end_seconds'];
+    let duration = slots[i]['end_seconds'] - previous_duration;
+    s += '<div>' + name + ': ' + formatSeconds(duration) + '</div>';
+  }
+  document.querySelector(id).innerHTML = s;
+}
+
+// compute slots and start countdown
+function start(minutes, break_seconds) {
+  console.log(minutes, break_seconds);
+  let rooms = [];
+  for (let people = 3; people < 6; people++) {
+    let slots = computeSlots(minutes, break_seconds, people);
+    printTimes(slots, '#slots' + people);
+    rooms.push({'people': people, 'slots': slots, 'currentSlot': 0});
+  }
+
+  let startTimeMs = Date.now();
+  let endTimeMs = startTimeMs + minutes * 60 * 1000;
+  let timerId = setInterval(function() {
+    let now = Date.now();
+    if (now > endTimeMs) {
+      // done, we've reached the end of the mastermind
+      clearInterval(timerId);
+      document.querySelector('title').text = TITLE;
+      document.querySelector('#start').disabled = false;
+      return;
+    }
+
+    // display remaining time of whole mastermind in title and tab
+    let seconds = Math.floor((endTimeMs - now) / 1000);
+    let minutes = Math.round((endTimeMs - now) / 60000);
+    document.querySelector('title').text = minutes + " " + TITLE;
+    document.querySelector('#countdown').innerHTML = formatSeconds(seconds);
+    
+    // iterate over all room sizes to update their slot name and time
+    for (let i = 0; i < rooms.length; i++) {
+      let room = rooms[i];
+      let currentSlot = room['currentSlot'];
+      let slot = room['slots'][currentSlot];
+      let people = room['people'];
+      let slotEndTimeMs = startTimeMs + slot['end_seconds'] * 1000;
+      if (now >= slotEndTimeMs) {
+        // switch to next slot
+        currentSlot += 1;
+        if (currentSlot < room['slots'].length) {
+          slot = room['slots'][currentSlot];
+          slotEndTimeMs = startTimeMs + slot['end_seconds'] * 1000;
+        }
+        else {
+          currentSlot = 0;
+        }
+        room['currentSlot'] = currentSlot;
+      }
+
+      // display new name
+      document.querySelector('#name' + people).innerHTML = slot['name'];
+
+      // display remaining time
+      let s = '0:00';
+      if (now < slotEndTimeMs) {
+        s = formatSeconds(Math.floor((slotEndTimeMs - now) / 1000));
+      }
+      document.querySelector('#countdown' + people).innerHTML = s;
+    }
+  }, INTERVAL_MS);
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    // select our play button
+    document.querySelector('#start').addEventListener('click', function() {
+      let minutes = parseInt(document.querySelector('#time').value);
+      let break_seconds = parseInt(document.querySelector('#break').value);
+      if (!isNaN(minutes) && !isNaN(break_seconds)) {
+        document.querySelector('#start').disabled = true;
+        start(minutes, break_seconds);
+      }
+    }, false);
+});
+</script>
+</head>
+<body>
+
+<h1>Mastermind <span id="countdown">0:00</span></h1>
+
+<table>
+<tr>
+  <th>
+    <span id="people3">3</span>
+    <br>
+    <span id="name3">-</span>
+    <br>
+    <span id="countdown3">0:00</span>
+  </th>
+  <th>
+    <span id="people4">4</span>
+    <br>
+    <span id="name4">-</span>
+    <br>
+    <span id="countdown4">0:00</span>
+  </th>
+  <th>
+    <span id="people5">5</span>
+    <br>
+    <span id="name5">-</span>
+    <br>
+    <span id="countdown5">0:00</span>
+  </th>
+</tr>
+
+<tr>
+  <td><span id="slots3"></span></td>
+  <td><span id="slots4"></span></td>
+  <td><span id="slots5"></span></td>
+</tr>
+</table>
+
+<fieldset>
+  <legend>Control</legend>
+  <table>
+  <tr>
+    <td><label for="time">Total time (m)</label></td>
+    <td><input type="text" name="time" id="time" placeholder="minutes" value="25"></td>
+  </tr>
+  <tr>
+    <td><label for="break">Break (s)</label></td>
+    <td><input type="text" name="break" id="break" placeholder="seconds" value="30"></td>
+  </tr>
+  <tr>
+    <td><button id="start" onclick="return false">&gt;</button></td>
+  </tr>
+  </table>
+</fieldset>  
+
+<div>
+Split time among different number of users
+<br>
+Privacy: Everything runs in your browser, no server needed, no cookies. You can simply download the file and open it locally.
+<br>
+Inspired by <a href="https://www.productivityday.com/">Productivity Day</a>.
+</div>
+
+</body>
+</html>

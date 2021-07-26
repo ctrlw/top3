@@ -52,7 +52,7 @@ const INTERVAL_MS = 100;
 
 // create array with slot names and durations for a given number of people
 function computeSlots(duration_minutes, break_seconds, people) {
-  if (duration_minutes <= 0 || break_seconds <= 0 || people <= 0) {
+  if (duration_minutes <= 0 || break_seconds < 0 || people <= 0) {
     return [];
   }
 

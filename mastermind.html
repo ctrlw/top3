@@ -51,17 +51,17 @@ const TITLE = 'Mastermind';
 const INTERVAL_MS = 100;
 
 // create array with slot names and durations for a given number of people
-function computeSlots(duration_minutes, break_seconds, people) {
-  if (duration_minutes <= 0 || break_seconds < 0 || people <= 0) {
+function computeSlots(duration_minutes, transition_seconds, people) {
+  if (duration_minutes <= 0 || transition_seconds < 0 || people <= 0) {
     return [];
   }
 
   let duration_seconds = duration_minutes * 60;
-  if ((people - 1) * break_seconds >= duration_seconds) {
-    // if the breaks would fill or exceed the duration, skip them
-    break_seconds = 0;
+  if ((people - 1) * transition_seconds >= duration_seconds) {
+    // if the transitions would fill or exceed the duration, skip them
+    transition_seconds = 0;
   }
-  let people_seconds = duration_seconds - (people - 1) * break_seconds;
+  let people_seconds = duration_seconds - (people - 1) * transition_seconds;
   let person_seconds = people_seconds / people;
   person_seconds = person_seconds < 0 ? 0 : person_seconds;
   let slots = [];
@@ -70,9 +70,9 @@ function computeSlots(duration_minutes, break_seconds, people) {
     let name = 'Person ' + (i + 1);
     end_seconds += person_seconds;
     slots.push({'name': name, 'end_seconds': Math.floor(end_seconds)}); // floor to sync timers
-    if (i + 1 < people && break_seconds > 0) {
-      // add break except after the last participant
-      end_seconds += break_seconds;
+    if (i + 1 < people && transition_seconds > 0) {
+      // add transition except after the last participant
+      end_seconds += transition_seconds;
       slots.push({"name": 'Transition', 'end_seconds': Math.floor(end_seconds)}); // floor to sync timers
     }
   }
@@ -100,11 +100,11 @@ function printTimes(slots, id) {
 }
 
 // compute slots and start countdown
-function start(minutes, break_seconds) {
-  console.log(minutes, break_seconds);
+function start(minutes, transition_seconds) {
+  console.log(minutes, transition_seconds);
   let rooms = [];
   for (let people = 3; people < 6; people++) {
-    let slots = computeSlots(minutes, break_seconds, people);
+    let slots = computeSlots(minutes, transition_seconds, people);
     printTimes(slots, '#slots' + people);
     rooms.push({'people': people, 'slots': slots, 'currentSlot': 0});
   }
@@ -164,10 +164,10 @@ document.addEventListener("DOMContentLoaded", function() {
     // select our play button
     document.querySelector('#start').addEventListener('click', function() {
       let minutes = parseInt(document.querySelector('#time').value);
-      let break_seconds = parseInt(document.querySelector('#break').value);
-      if (!isNaN(minutes) && !isNaN(break_seconds)) {
+      let transition_seconds = parseInt(document.querySelector('#transition').value);
+      if (!isNaN(minutes) && !isNaN(transition_seconds)) {
         document.querySelector('#start').disabled = true;
-        start(minutes, break_seconds);
+        start(minutes, transition_seconds);
       }
     }, false);
 });
@@ -218,8 +218,8 @@ document.addEventListener("DOMContentLoaded", function() {
     <td><input type="text" name="time" id="time" placeholder="minutes" value="25"></td>
   </tr>
   <tr>
-    <td><label for="break">Break (s)</label></td>
-    <td><input type="text" name="break" id="break" placeholder="seconds" value="30"></td>
+    <td><label for="transition">Transition (s)</label></td>
+    <td><input type="text" name="transition" id="transition" placeholder="seconds" value="30"></td>
   </tr>
   <tr>
     <td><button id="start" onclick="return false" type="submit">&gt;</button></td>
@@ -229,7 +229,7 @@ document.addEventListener("DOMContentLoaded", function() {
 </form>
 
 <div>
-Split the given time among different numbers of users. Optional transition phases (breaks) may be taken into account. The timer cannot be stopped once it's started, but you can reload the page.
+Split the given time among different numbers of users. Optional transition phases may be taken into account. The timer cannot be stopped once it's started, but you can reload the page.
 <br>
 Privacy: Everything runs in your browser, no server needed, no cookies. You can simply download the file and open it locally.
 <br>

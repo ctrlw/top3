@@ -57,24 +57,24 @@ function computeSlots(duration_minutes, transition_seconds, people) {
   }
 
   let duration_seconds = duration_minutes * 60;
-  if ((people - 1) * transition_seconds >= duration_seconds) {
+  if (people * transition_seconds >= duration_seconds) {
     // if the transitions would fill or exceed the duration, skip them
     transition_seconds = 0;
   }
-  let people_seconds = duration_seconds - (people - 1) * transition_seconds;
+  let people_seconds = duration_seconds - people * transition_seconds;
   let person_seconds = people_seconds / people;
   person_seconds = person_seconds < 0 ? 0 : person_seconds;
   let slots = [];
   let end_seconds = 0;
   for (let i = 0; i < people; i++) {
+    // add transition, even before the first participant to give people time to arrive
+    end_seconds += transition_seconds;
+    slots.push({"name": 'Transition', 'end_seconds': Math.floor(end_seconds)}); // floor to sync timers
+    
+    // add user time
     let name = 'Person ' + (i + 1);
     end_seconds += person_seconds;
     slots.push({'name': name, 'end_seconds': Math.floor(end_seconds)}); // floor to sync timers
-    if (i + 1 < people && transition_seconds > 0) {
-      // add transition except after the last participant
-      end_seconds += transition_seconds;
-      slots.push({"name": 'Transition', 'end_seconds': Math.floor(end_seconds)}); // floor to sync timers
-    }
   }
   return slots; // [{"name": "Person 1", "end_seconds": 180}, ..]
 }

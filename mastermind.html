@@ -1,6 +1,7 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
+<meta charset="UTF-8"/>
 <meta name="description" content="Mastermind countdown">
 <title>Mastermind</title>
 
@@ -21,6 +22,7 @@
   }
   td {
     vertical-align: top;
+    text-align: center;
   }
   th {
     padding: 2em;
@@ -39,175 +41,123 @@
     color: #14396A !important;
     background: #468CCF;
   } 
-  #start:disabled {
-    color: #AAAAAA !important;
-    background: #CCCCCC;
-    border-color: #AAAAAA;
-  } 
 </style>
 
 <script>
-const TITLE = 'Mastermind';
 const INTERVAL_MS = 100;
 
-// create array with slot names and durations for a given number of people
-function computeSlots(duration_minutes, transition_seconds, people) {
-  if (duration_minutes <= 0 || transition_seconds < 0 || people <= 0) {
-    return [];
+// convert duration into a string with format m:ss, return 0:00 for empty/negative values
+function formatMs(durationMs) {
+  s = '0:00';
+  if (durationMs > 0) {
+    let seconds = Math.ceil(durationMs / 1000);
+    let minutes = Math.floor(seconds / 60);
+    let secondsPart = seconds % 60;
+    s = minutes + ':' + (secondsPart < 10 ? '0' + secondsPart : secondsPart);
   }
-
-  let duration_seconds = duration_minutes * 60;
-  if (people * transition_seconds >= duration_seconds) {
-    // if the transitions would fill or exceed the duration, skip them
-    transition_seconds = 0;
-  }
-  let people_seconds = duration_seconds - people * transition_seconds;
-  let person_seconds = people_seconds / people;
-  person_seconds = person_seconds < 0 ? 0 : person_seconds;
-  let slots = [];
-  let end_seconds = 0;
-  for (let i = 0; i < people; i++) {
-    // add transition, even before the first participant to give people time to arrive
-    end_seconds += transition_seconds;
-    slots.push({"name": 'Transition', 'end_seconds': Math.floor(end_seconds)}); // floor to sync timers
-    
-    // add user time
-    let name = 'Person ' + (i + 1);
-    end_seconds += person_seconds;
-    slots.push({'name': name, 'end_seconds': Math.floor(end_seconds)}); // floor to sync timers
-  }
-  return slots; // [{"name": "Person 1", "end_seconds": 180}, ..]
+  return s;
 }
 
-// convert the number of seconds into a string with format m:ss
-function formatSeconds(duration_seconds) {
-  let minutes = Math.floor(duration_seconds / 60);
-  let seconds = Math.floor(duration_seconds % 60);
-  seconds = seconds < 10 ? '0' + seconds : seconds;
-  return minutes + ':' + seconds;
+// convert string with comma-separated numbers (e.g. 3,4) into sorted integers
+function string2sortedInts(s) {
+  let people = [];
+  if (typeof s === 'string' && /^[0-9, ]+$/.test(s)) {
+    unique = new Set(s.split(',').map(x => parseInt(x)));
+    people = Array.from(unique).sort((x,y) => x-y);
+  }
+  return people;
 }
 
-// print all slot names and durations into a given html element
-function printTimes(slots, id) {
-  s = '';
-  for (let i = 0; i < slots.length; i++) {
-    let name = slots[i]['name'];
-    let previous_duration = i == 0 ? 0 : slots[i - 1]['end_seconds'];
-    let duration = slots[i]['end_seconds'] - previous_duration;
-    s += '<div>' + name + ': ' + formatSeconds(duration) + '</div>';
-  }
-  document.querySelector(id).innerHTML = s;
+// create table content, append a row for each integer in the people array
+function createRooms(people, startTimeMs, minutes) {
+  let s = '<tr><th>Room</th><th>Speaker</th><th>Time left: <span id="countdown">0:00</span></th></tr>';
+  people.forEach(n => {
+    let url = makeUrl(n, startTimeMs, minutes);
+    s += `<tr><td><a href="${url}">${n} people</a></td><td id="speaker${n}"></td><td id="countdown${n}"></td></tr>`;
+  });
+  return s;
 }
 
-// compute slots and start countdown
-function start(minutes, transition_seconds) {
-  console.log(minutes, transition_seconds);
-  let rooms = [];
-  for (let people = 3; people < 6; people++) {
-    let slots = computeSlots(minutes, transition_seconds, people);
-    printTimes(slots, '#slots' + people);
-    rooms.push({'people': people, 'slots': slots, 'currentSlot': 0});
-  }
+// update table with overall remaining time, current speaker and their remaining time
+function updateTime(people, minutes, startTimeMs) {
+  let now = Date.now();
+  let durationMs = minutes * 60 * 1000;
+  let elapsedMs = now - startTimeMs;
 
-  let startTimeMs = Date.now();
+  document.querySelector('#countdown').innerHTML = formatMs(durationMs - elapsedMs);
+
+  people.forEach(n => {
+    let msPerSpeaker = Math.floor(durationMs / n);
+    let speaker = Math.min(n, Math.floor(elapsedMs / msPerSpeaker) + 1);
+    document.querySelector('#speaker' + n).innerText = speaker;
+
+    let msLeft = Math.max(0, (speaker * msPerSpeaker) - elapsedMs);
+    document.querySelector('#countdown' + n).innerText = formatMs(msLeft);
+  });
+}
+
+function makeUrl(peopleString, minutes, startTimeMs) {
+  const url = new URL(window.location.href); // http://.../mastermind.html?duration=25&people=3&ts=123456789
+  url.searchParams.set('people', peopleString);
+  url.searchParams.set('duration', minutes);
+  url.searchParams.set('ts', startTimeMs);
+  return url.href;
+}
+
+// start countdown
+// peopleString: string with comma-separated number of people in rooms, e.g. 3,4
+// minutes: duration in minutes
+// startTimeMs: Unix timestamp of the start time (TODO: server side for consistency across clients)
+function startTimer(peopleString, minutes, startTimeMs) {
+  // console.log(peopleString, minutes, startTimeMs);
+  people = string2sortedInts(peopleString);
+  document.querySelector('#rooms').innerHTML = createRooms(people, minutes, startTimeMs);
+
   let endTimeMs = startTimeMs + minutes * 60 * 1000;
   let timerId = setInterval(function() {
     let now = Date.now();
+
+    updateTime(people, minutes, startTimeMs);
+
     if (now > endTimeMs) {
       // done, we've reached the end of the mastermind
       clearInterval(timerId);
-      document.querySelector('title').text = TITLE;
-      document.querySelector('#start').disabled = false;
       return;
     }
 
-    // display remaining time of whole mastermind in title and tab
-    let seconds = Math.floor((endTimeMs - now) / 1000);
-    let minutes = Math.round((endTimeMs - now) / 60000);
-    document.querySelector('title').text = minutes + " " + TITLE;
-    document.querySelector('#countdown').innerHTML = formatSeconds(seconds);
-    
-    // iterate over all room sizes to update their slot name and time
-    for (let i = 0; i < rooms.length; i++) {
-      let room = rooms[i];
-      let currentSlot = room['currentSlot'];
-      let slot = room['slots'][currentSlot];
-      let people = room['people'];
-      let slotEndTimeMs = startTimeMs + slot['end_seconds'] * 1000;
-      if (now >= slotEndTimeMs) {
-        // switch to next slot
-        currentSlot += 1;
-        if (currentSlot < room['slots'].length) {
-          slot = room['slots'][currentSlot];
-          slotEndTimeMs = startTimeMs + slot['end_seconds'] * 1000;
-        }
-        else {
-          currentSlot = 0;
-        }
-        room['currentSlot'] = currentSlot;
-      }
-
-      // display new name
-      document.querySelector('#name' + people).innerHTML = slot['name'];
-
-      // display remaining time
-      let s = '0:00';
-      if (now < slotEndTimeMs) {
-        s = formatSeconds(Math.floor((slotEndTimeMs - now) / 1000));
-      }
-      document.querySelector('#countdown' + people).innerHTML = s;
-    }
   }, INTERVAL_MS);
+  return timerId;
 }
 
 document.addEventListener("DOMContentLoaded", function() {
+    let timerId;
     // select our play button
     document.querySelector('#start').addEventListener('click', function() {
+      clearInterval(timerId);
       let minutes = parseInt(document.querySelector('#time').value);
-      let transition_seconds = parseInt(document.querySelector('#transition').value);
-      if (!isNaN(minutes) && !isNaN(transition_seconds)) {
-        document.querySelector('#start').disabled = true;
-        start(minutes, transition_seconds);
+      let people = document.querySelector('#n_users').value;
+      let startTimeMs = Date.now();
+      if (!isNaN(minutes)) {
+        timerId = startTimer(people, minutes, startTimeMs);
+        let url = makeUrl(people, minutes, startTimeMs);
+        history.pushState(null, document.querySelector('title').text, url);
       }
     }, false);
+    
+    // start timer if the url contains the necessary parameters
+    let url = new URL(window.location.href);
+    let duration = url.searchParams.get('duration');
+    let people = url.searchParams.get('people');
+    let startTimeMs = url.searchParams.get('ts');
+    if (duration && people && startTimeMs) {
+      timerId = startTimer(people, duration, startTimeMs);
+    }
 });
 </script>
 </head>
 <body>
 
-<h1>Mastermind <span id="countdown">0:00</span></h1>
-
-<table>
-<tr>
-  <th>
-    <span id="people3">3</span>
-    <br>
-    <span id="name3">User</span>
-    <br>
-    <span id="countdown3">0:00</span>
-  </th>
-  <th>
-    <span id="people4">4</span>
-    <br>
-    <span id="name4">User</span>
-    <br>
-    <span id="countdown4">0:00</span>
-  </th>
-  <th>
-    <span id="people5">5</span>
-    <br>
-    <span id="name5">User</span>
-    <br>
-    <span id="countdown5">0:00</span>
-  </th>
-</tr>
-
-<tr>
-  <td><span id="slots3"></span></td>
-  <td><span id="slots4"></span></td>
-  <td><span id="slots5"></span></td>
-</tr>
-</table>
+<h1>Mastermind</h1>
 
 <form action="">
 <fieldset>
@@ -215,11 +165,11 @@ document.addEventListener("DOMContentLoaded", function() {
   <table>
   <tr>
     <td><label for="time">Total time (min)</label></td>
-    <td><input type="text" name="time" id="time" placeholder="minutes" value="25"></td>
+    <td><input type="text" name="time" id="time" placeholder="duration in minutes, e.g. 25" value=""></td>
   </tr>
   <tr>
-    <td><label for="transition">Transition (s)</label></td>
-    <td><input type="text" name="transition" id="transition" placeholder="seconds" value="30"></td>
+    <td><label for="n_users">Users</label></td>
+    <td><input type="text" name="n_users" id="n_users" placeholder="people in rooms, e.g. 3,4,5" value=""></td>
   </tr>
   <tr>
     <td><button id="start" onclick="return false" type="submit">&gt;</button></td>
@@ -228,10 +178,14 @@ document.addEventListener("DOMContentLoaded", function() {
 </fieldset>
 </form>
 
+<table id="rooms">
+</table>
+    
 <div>
-Split the given time among different numbers of users. Optional transition phases may be taken into account. The timer cannot be stopped once it's started, but you can reload the page.
 <br>
-Privacy: Everything runs in your browser, no server needed, no cookies. You can simply download the file and open it locally.
+Splits the given time among different numbers of users.
+<br>
+Privacy: No cookies. You can simply download the file and run everything locally (unless you need server time-sync).
 <br>
 Inspired by <a href="https://www.productivityday.com/">Productivity Day</a>.
 </div>

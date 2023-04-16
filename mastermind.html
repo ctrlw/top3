@@ -13,6 +13,7 @@
     -moz-border-radius: 3px;
     -webkit-border-radius: 3px;
     border-radius: 3px;
+    display: inline-block;
   }
   button {
     margin: 2px;
@@ -69,38 +70,48 @@ function string2sortedInts(s) {
 }
 
 // create table content, append a row for each integer in the people array
-function createRooms(people, startTimeMs, minutes) {
+function createRooms(people, startTimeMs, minutes, transitionSeconds) {
   let s = '<tr><th>Room</th><th>Speaker</th><th>Time left: <span id="countdown">0:00</span></th></tr>';
   people.forEach(n => {
-    let url = makeUrl(n, startTimeMs, minutes);
+    let url = makeUrl(n, startTimeMs, minutes, transitionSeconds);
     s += `<tr><td><a href="${url}">${n} people</a></td><td id="speaker${n}"></td><td id="countdown${n}"></td></tr>`;
   });
   return s;
 }
 
 // update table with overall remaining time, current speaker and their remaining time
-function updateTime(people, minutes, startTimeMs) {
+function updateTime(people, minutes, startTimeMs, transitionSeconds) {
   let now = Date.now();
   let durationMs = minutes * 60 * 1000;
+  let transitionMs = transitionSeconds * 1000;
   let elapsedMs = now - startTimeMs;
 
   document.querySelector('#countdown').innerHTML = formatMs(durationMs - elapsedMs);
 
   people.forEach(n => {
     let msPerSpeaker = Math.floor(durationMs / n);
-    let speaker = Math.min(n, Math.floor(elapsedMs / msPerSpeaker) + 1);
+    let speaker = Math.min(n, Math.floor(elapsedMs / msPerSpeaker) + 1); // starting with speaker 1
     document.querySelector('#speaker' + n).innerText = speaker;
 
-    let msLeft = Math.max(0, (speaker * msPerSpeaker) - elapsedMs);
-    document.querySelector('#countdown' + n).innerText = formatMs(msLeft);
+    let s = '0:00';
+    let elapsedMsForSpeaker = elapsedMs - ((speaker - 1) * msPerSpeaker);
+    if (elapsedMsForSpeaker < transitionMs) {
+      // transition period, mark countdown as negative
+      s = '-' + formatMs(transitionMs - elapsedMsForSpeaker);
+    } else if (elapsedMsForSpeaker < msPerSpeaker) {
+      // speaking period
+      s = formatMs(Math.max(0, msPerSpeaker - elapsedMsForSpeaker));
+    }
+    document.querySelector('#countdown' + n).innerText = s;
   });
 }
 
-function makeUrl(peopleString, minutes, startTimeMs) {
+function makeUrl(peopleString, minutes, startTimeMs, transitionSeconds) {
   const url = new URL(window.location.href); // http://.../mastermind.html?duration=25&people=3&ts=123456789
   url.searchParams.set('people', peopleString);
   url.searchParams.set('duration', minutes);
   url.searchParams.set('ts', startTimeMs);
+  url.searchParams.set('transition', transitionSeconds);
   return url.href;
 }
 
@@ -108,16 +119,17 @@ function makeUrl(peopleString, minutes, startTimeMs) {
 // peopleString: string with comma-separated number of people in rooms, e.g. 3,4
 // minutes: duration in minutes
 // startTimeMs: Unix timestamp of the start time (TODO: server side for consistency across clients)
-function startTimer(peopleString, minutes, startTimeMs) {
+// transitionSeconds: duration of the transition period between speakers
+function startTimer(peopleString, minutes, startTimeMs, transitionSeconds) {
   // console.log(peopleString, minutes, startTimeMs);
   people = string2sortedInts(peopleString);
-  document.querySelector('#rooms').innerHTML = createRooms(people, minutes, startTimeMs);
+  document.querySelector('#rooms').innerHTML = createRooms(people, minutes, startTimeMs, transitionSeconds);
 
   let endTimeMs = startTimeMs + minutes * 60 * 1000;
   let timerId = setInterval(function() {
     let now = Date.now();
 
-    updateTime(people, minutes, startTimeMs);
+    updateTime(people, minutes, startTimeMs, transitionSeconds);
 
     if (now > endTimeMs) {
       // done, we've reached the end of the mastermind
@@ -135,11 +147,20 @@ document.addEventListener("DOMContentLoaded", function() {
     document.querySelector('#start').addEventListener('click', function() {
       clearInterval(timerId);
       let minutes = parseInt(document.querySelector('#time').value);
+
       let people = document.querySelector('#n_users').value;
+      
+      let transitionSeconds = parseInt(document.querySelector('#transition').value);
+      if (isNaN(transitionSeconds)) {
+        // transition is optional
+        transitionSeconds = 0;
+      }
+      
       let startTimeMs = Date.now();
+      
       if (!isNaN(minutes)) {
-        timerId = startTimer(people, minutes, startTimeMs);
-        let url = makeUrl(people, minutes, startTimeMs);
+        timerId = startTimer(people, minutes, startTimeMs, transitionSeconds);
+        let url = makeUrl(people, minutes, startTimeMs, transitionSeconds);
         history.pushState(null, document.querySelector('title').text, url);
       }
     }, false);
@@ -149,8 +170,9 @@ document.addEventListener("DOMContentLoaded", function() {
     let duration = url.searchParams.get('duration');
     let people = url.searchParams.get('people');
     let startTimeMs = url.searchParams.get('ts');
-    if (duration && people && startTimeMs) {
-      timerId = startTimer(people, duration, startTimeMs);
+    let transitionSeconds = url.searchParams.get('transition');
+    if (duration && people && startTimeMs && transitionSeconds) {
+      timerId = startTimer(people, duration, startTimeMs, transitionSeconds);
     }
 });
 </script>
@@ -169,7 +191,11 @@ document.addEventListener("DOMContentLoaded", function() {
   </tr>
   <tr>
     <td><label for="n_users">Users</label></td>
-    <td><input type="text" name="n_users" id="n_users" placeholder="people in rooms, e.g. 3,4,5" value=""></td>
+    <td><input type="text" name="n_users" id="n_users" placeholder="people in rooms, e.g. 3,4,5" value="3,4"></td>
+  </tr>
+  <tr>
+    <td><label for="transition">Transition (sec)</label></td>
+    <td><input type="text" name="transition" id="transition" placeholder="seconds" value="10"></td>
   </tr>
   <tr>
     <td><button id="start" onclick="return false" type="submit">&gt;</button></td>

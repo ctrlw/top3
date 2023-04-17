@@ -25,9 +25,6 @@
     vertical-align: top;
     text-align: center;
   }
-  td.active {
-    font-weight: bold;
-  }
   th {
     padding: 2em;
   }
@@ -95,25 +92,20 @@ function updateTime(people, minutes, startTimeMs, transitionSeconds) {
     let msPerSpeaker = Math.floor(durationMs / n);
     let speaker = Math.min(n, Math.floor(elapsedMs / msPerSpeaker) + 1); // starting with speaker 1
     let currentSpeaker = document.querySelector('#speaker' + n).innerText;
-    document.querySelector('#speaker' + n).innerText = speaker;
-    if (currentSpeaker != speaker) {
-      // speaker changed, start transition of background color
-      document.querySelector('#speaker' + n).className = 'active';
-      setTimeout(() => {
-        document.querySelector('#speaker' + n).className = '';
-      }, 3000);
-    }
 
     let s = '0:00';
     let elapsedMsForSpeaker = elapsedMs - ((speaker - 1) * msPerSpeaker);
     if (elapsedMsForSpeaker < transitionMs) {
       // transition period, mark countdown as negative
-      s = '-' + formatMs(transitionMs - elapsedMsForSpeaker);
+      s = formatMs(transitionMs - elapsedMsForSpeaker);
+      speaker = 'transition';
     } else if (elapsedMsForSpeaker < msPerSpeaker) {
       // speaking period
       s = formatMs(Math.max(0, msPerSpeaker - elapsedMsForSpeaker));
     }
+
     document.querySelector('#countdown' + n).innerText = s;
+    document.querySelector('#speaker' + n).innerText = speaker;
   });
 }
 

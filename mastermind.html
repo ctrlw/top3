@@ -25,6 +25,9 @@
     vertical-align: top;
     text-align: center;
   }
+  td.active {
+    font-weight: bold;
+  }
   th {
     padding: 2em;
   }
@@ -71,7 +74,7 @@ function string2sortedInts(s) {
 
 // create table content, append a row for each integer in the people array
 function createRooms(people, startTimeMs, minutes, transitionSeconds) {
-  let s = '<tr><th>Room</th><th>Speaker</th><th>Time left: <span id="countdown">0:00</span></th></tr>';
+  let s = '<tr><th>Room size</th><th>Speaker</th><th>Time left: <span id="countdown">0:00</span></th></tr>';
   people.forEach(n => {
     let url = makeUrl(n, startTimeMs, minutes, transitionSeconds);
     s += `<tr><td><a href="${url}">${n} people</a></td><td id="speaker${n}"></td><td id="countdown${n}"></td></tr>`;
@@ -91,7 +94,15 @@ function updateTime(people, minutes, startTimeMs, transitionSeconds) {
   people.forEach(n => {
     let msPerSpeaker = Math.floor(durationMs / n);
     let speaker = Math.min(n, Math.floor(elapsedMs / msPerSpeaker) + 1); // starting with speaker 1
+    let currentSpeaker = document.querySelector('#speaker' + n).innerText;
     document.querySelector('#speaker' + n).innerText = speaker;
+    if (currentSpeaker != speaker) {
+      // speaker changed, start transition of background color
+      document.querySelector('#speaker' + n).className = 'active';
+      setTimeout(() => {
+        document.querySelector('#speaker' + n).className = '';
+      }, 3000);
+    }
 
     let s = '0:00';
     let elapsedMsForSpeaker = elapsedMs - ((speaker - 1) * msPerSpeaker);
